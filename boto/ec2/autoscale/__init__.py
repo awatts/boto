@@ -40,6 +40,7 @@ from boto.ec2.autoscale.activity import Activity
 from boto.ec2.autoscale.policy import AdjustmentType
 from boto.ec2.autoscale.policy import MetricCollectionTypes
 from boto.ec2.autoscale.policy import ScalingPolicy
+from boto.ec2.autoscale.policy import TerminationPolicies
 from boto.ec2.autoscale.instance import Instance
 from boto.ec2.autoscale.scheduled import ScheduledUpdateGroupAction
 from boto.ec2.autoscale.tag import Tag
@@ -51,7 +52,9 @@ RegionData = {
     'sa-east-1': 'autoscaling.sa-east-1.amazonaws.com',
     'eu-west-1': 'autoscaling.eu-west-1.amazonaws.com',
     'ap-northeast-1': 'autoscaling.ap-northeast-1.amazonaws.com',
-    'ap-southeast-1': 'autoscaling.ap-southeast-1.amazonaws.com'}
+    'ap-southeast-1': 'autoscaling.ap-southeast-1.amazonaws.com',
+    'ap-southeast-2': 'autoscaling.ap-southeast-2.amazonaws.com',
+}
 
 
 def regions():
@@ -171,6 +174,9 @@ class AutoScaleConnection(AWSQueryConnection):
             params['DefaultCooldown'] = as_group.default_cooldown
         if as_group.placement_group:
             params['PlacementGroup'] = as_group.placement_group
+        if as_group.termination_policies:
+            self.build_list_params(params, as_group.termination_policies,
+                                   'TerminationPolicies')
         if op.startswith('Create'):
             # you can only associate load balancers with an autoscale
             # group at creation time
@@ -360,6 +366,15 @@ class AutoScaleConnection(AWSQueryConnection):
             self.build_list_params(params, activity_ids, 'ActivityIds')
         return self.get_list('DescribeScalingActivities',
                              params, [('member', Activity)])
+
+    def get_termination_policies(self):
+        """Gets all valid termination policies.
+
+        These values can then be used as the termination_policies arg
+        when creating and updating autoscale groups.
+        """
+        return self.get_object('DescribeTerminationPolicyTypes',
+                               {}, TerminationPolicies)
 
     def delete_scheduled_action(self, scheduled_action_name,
                                 autoscale_group=None):
@@ -687,6 +702,29 @@ class AutoScaleConnection(AWSQueryConnection):
         else:
             params['ShouldRespectGracePeriod'] = 'false'
         return self.get_status('SetInstanceHealth', params)
+
+    def set_desired_capacity(self, group_name, desired_capacity, honor_cooldown=False):
+        """
+        Adjusts the desired size of the AutoScalingGroup by initiating scaling
+        activities. When reducing the size of the group, it is not possible to define
+        which Amazon EC2 instances will be terminated. This applies to any Auto Scaling
+        decisions that might result in terminating instances.
+
+        :type group_name: string
+        :param group_name: name of the auto scaling group
+
+        :type desired_capacity: integer
+        :param desired_capacity: new capacity setting for auto scaling group
+
+        :type honor_cooldown: boolean
+        :param honor_cooldown: by default, overrides any cooldown period
+        """
+        params = {'AutoScalingGroupName': group_name,
+                  'DesiredCapacity': desired_capacity}
+        if honor_cooldown:
+            params['HonorCooldown'] = json.dumps('True')
+
+        return self.get_status('SetDesiredCapacity', params)
 
     # Tag methods
 

@@ -24,11 +24,7 @@ from datetime import datetime
 from boto.resultset import ResultSet
 from boto.ec2.cloudwatch.listelement import ListElement
 from boto.ec2.cloudwatch.dimension import Dimension
-
-try:
-    import simplejson as json
-except ImportError:
-    import json
+from boto.compat import json
 
 
 class MetricAlarms(list):
@@ -312,5 +308,9 @@ class AlarmHistoryItem(object):
         elif name == 'HistorySummary':
             self.summary = value
         elif name == 'Timestamp':
-            self.timestamp = datetime.strptime(value, '%Y-%m-%dT%H:%M:%S.%fZ')
+            try:
+                self.timestamp = datetime.strptime(value,
+                                                   '%Y-%m-%dT%H:%M:%S.%fZ')
+            except ValueError:
+                self.timestamp = datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ')
 
